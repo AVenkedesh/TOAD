@@ -1,0 +1,4 @@
+paths:
+  train_csv: "data/rat_original/train.csv"
+  weights_in: "models/V2_best_model.keras"
+  output_dir: "outputs"

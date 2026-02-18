@@ -1,0 +1,22 @@
+name: seko
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - scikit-image
+  - scipy
+  - opencv
+  - pillow
+  - jupyter
+  - tqdm
+  - pyyaml
+  - pip
+  - pip:
+      - tensorflow==2.20.0

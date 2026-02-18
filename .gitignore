@@ -1,0 +1,21 @@
+# data
+data/
+datasets/
+**/*.tif
+**/*.tiff
+**/*.png
+**/*.jpg
+
+# outputs
+outputs/
+predictions/
+
+# model weights
+*.keras
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+*.pyc
