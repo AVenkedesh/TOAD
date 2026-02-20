@@ -11,6 +11,7 @@ Create the environment:
 ```bash
 conda env create -f environment.yml
 conda activate seko
+```
 
 ## Running Inference (Single Image Forward Pass)
 
