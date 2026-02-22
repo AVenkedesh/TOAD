@@ -26,14 +26,7 @@ output_directory = cfg["paths"]["output_dir"]
 IMG_HEIGHT = cfg["data"]["img_height"]
 IMG_WIDTH = cfg["data"]["img_width"]
 
-def load_model_from_path(model_path):
-    return load_model(model_path)
-
 def predict_images(input_directory, output_directory, model):
-
-    if not os.path.exists(output_directory):
-        os.makedirs(output_directory)
-
     original_pred_folder = os.path.join(output_directory, "Original_Predictions")
     visualized_pred_folder = os.path.join(output_directory, "Visualized_Predictions")
 
@@ -85,5 +78,5 @@ def predict_images(input_directory, output_directory, model):
         cv2.imwrite(visualized_output_path, normalized_img)
 
 if __name__ == "__main__":
-    model = load_model_from_path(model_path)
+    model = load_model(model_path)
     predict_images(input_directory, output_directory, model)
