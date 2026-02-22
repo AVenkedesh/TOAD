@@ -33,49 +33,34 @@ def predict_images(input_directory, output_directory, model):
     os.makedirs(original_pred_folder, exist_ok=True)
     os.makedirs(visualized_pred_folder, exist_ok=True)
 
-    images = []
-    image_names = []
-
     for img_path in glob.glob(os.path.join(input_directory, "*.tif*")):
         img = cv2.imread(img_path, 1)
-
         if img is None:
             print(f"Skipping {img_path}: Could not read image.")
             continue
-
         if img.shape[2] != 3:
             print(f"Skipping {img_path}: Not an RGB image.")
             continue
-
         if img.shape[:2] != (IMG_HEIGHT, IMG_WIDTH):
             print(f"Resizing {img_path} to {IMG_WIDTH}x{IMG_HEIGHT}")
             img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
 
-        images.append(img)
-        image_names.append(os.path.basename(img_path))
-
-    images = np.array(images)
-    images = images / 255.0
-
-    for i, img in enumerate(images):
+        img = (img / 255.0).astype(np.float32)
         img_input = np.expand_dims(img, 0)
         prediction = model.predict(img_input)
         predicted_img = np.argmax(prediction, axis=-1)[0, :, :]
 
-        original_output_path = os.path.join(
-            original_pred_folder, f"prediction_{image_names[i]}"
-        )
-        cv2.imwrite(original_output_path, predicted_img)
+        name = os.path.basename(img_path)
+        cv2.imwrite(os.path.join(original_pred_folder, f"prediction_{name}"), predicted_img)
 
+        pred_max = np.max(predicted_img)
         normalized_img = (
-            (predicted_img / np.max(predicted_img)) * 255
+            (predicted_img / pred_max * 255) if pred_max > 0 else np.zeros_like(predicted_img, dtype=np.uint8)
         ).astype(np.uint8)
-
-        visualized_output_path = os.path.join(
-            visualized_pred_folder,
-            f"visualized_prediction_{image_names[i]}"
+        cv2.imwrite(
+            os.path.join(visualized_pred_folder, f"visualized_prediction_{name}"),
+            normalized_img,
         )
-        cv2.imwrite(visualized_output_path, normalized_img)
 
 if __name__ == "__main__":
     model = load_model(model_path)
