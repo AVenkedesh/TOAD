@@ -136,12 +136,12 @@ IMG_CHANNELS = X_train.shape[3]
 def get_model():
     return multi_unet_model(n_classes=n_classes, IMG_HEIGHT=IMG_HEIGHT, IMG_WIDTH=IMG_WIDTH, IMG_CHANNELS=IMG_CHANNELS)
 
-model = get_model()
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+# model = get_model()
+# model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# Define a ModelCheckpoint callback
-checkpoint_path = os.environ["SEKO_WEIGHTS_OUT"]
-checkpoint = ModelCheckpoint(checkpoint_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+# # Define a ModelCheckpoint callback
+# checkpoint_path = os.environ["SEKO_WEIGHTS_OUT"]
+# checkpoint = ModelCheckpoint(checkpoint_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
 # Keep this commented out until training is necessary
 # history = model.fit(X_train, y_train_cat, 
@@ -164,28 +164,28 @@ print("Accuracy of the best model is = ", (acc * 100.0), "%")
 # plt.plot(epochs, loss, 'y', label='Training loss')
 # plt.plot(epochs, val_loss, 'r', label='Validation loss')
 
-plt.title('Training and validation loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.legend()
-plt.show()
+# plt.title('Training and validation loss')
+# plt.xlabel('Epochs')
+# plt.ylabel('Loss')
+# plt.legend()
+# plt.show()
 
-# Sample prediction to evaluate the model
-test_img_number = random.randrange(len(X_test))
-test_img = X_test[test_img_number]
-ground_truth = y_test[test_img_number]
-test_img_input = np.expand_dims(test_img, 0)
-prediction = best_model.predict(test_img_input)
-predicted_img = np.argmax(prediction, axis=3)[0, :, :]
+# # Sample prediction to evaluate the model
+# test_img_number = random.randrange(len(X_test))
+# test_img = X_test[test_img_number]
+# ground_truth = y_test[test_img_number]
+# test_img_input = np.expand_dims(test_img, 0)
+# prediction = best_model.predict(test_img_input)
+# predicted_img = np.argmax(prediction, axis=3)[0, :, :]
 
-plt.figure(figsize=(12, 8))
-plt.subplot(231)
-plt.title('Testing Image')
-plt.imshow(test_img)
-plt.subplot(232)
-plt.title('Testing Label')
-plt.imshow(ground_truth[:,:,0], cmap='jet')
-plt.subplot(233)
-plt.title('Prediction on test image')
-plt.imshow(predicted_img, cmap='jet')
-plt.show()
+# plt.figure(figsize=(12, 8))
+# plt.subplot(231)
+# plt.title('Testing Image')
+# plt.imshow(test_img)
+# plt.subplot(232)
+# plt.title('Testing Label')
+# plt.imshow(ground_truth[:,:,0], cmap='jet')
+# plt.subplot(233)
+# plt.title('Prediction on test image')
+# plt.imshow(predicted_img, cmap='jet')
+# plt.show()
