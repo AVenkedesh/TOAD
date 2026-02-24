@@ -140,7 +140,7 @@ def get_model():
 # model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
 # # Define a ModelCheckpoint callback
-# checkpoint_path = os.environ["SEKO_WEIGHTS_OUT"]
+checkpoint_path = os.environ["SEKO_WEIGHTS_OUT"]
 # checkpoint = ModelCheckpoint(checkpoint_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
 # Keep this commented out until training is necessary
