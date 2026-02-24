@@ -14,7 +14,7 @@ import numpy as np
 from keras.models import load_model
 
 # Reusable visualization helpers
-from TOAD.src.visualize_mask import save_grayscale, overlay_mask
+from visualize_mask import save_grayscale, overlay_mask
 
 
 def load_and_preprocess_image(image_path: str, height: int, width: int, rgb: bool) -> tuple[np.ndarray, np.ndarray]:
