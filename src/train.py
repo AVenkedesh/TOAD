@@ -4,18 +4,20 @@ Created on Mon Mar 18 14:55:00 2024
 
 @author: justinjoseph
 """
-from keras.models import Model
-from keras.layers import Input, Conv2D, MaxPooling2D, concatenate, Conv2DTranspose, Dropout
 import os
+import random
+
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
+import pandas as pd
+import keras
+from keras.callbacks import ModelCheckpoint
+from keras.layers import Input, Conv2D, MaxPooling2D, concatenate, Conv2DTranspose, Dropout
+from keras.models import Model
 from keras.utils import to_categorical
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-import pandas as pd
-from keras.callbacks import ModelCheckpoint
-import keras
+from matplotlib import pyplot as plt
 
 # Model building function
 def multi_unet_model(n_classes=5, IMG_HEIGHT=192, IMG_WIDTH=256, IMG_CHANNELS=3):
@@ -71,16 +73,16 @@ def multi_unet_model(n_classes=5, IMG_HEIGHT=192, IMG_WIDTH=256, IMG_CHANNELS=3)
     c9 = Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(u9)
     c9 = Dropout(0.1)(c9)
     c9 = Conv2D(16, (3, 3), activation='relu', kernel_initializer='he_normal', padding='same')(c9)
-     
-    outputs = Conv2D(n_classes, (1, 1), activation='softmax')(c9)
-     
-    model = Model(inputs=[inputs], outputs=[outputs])
     
     #NOTE: Compile the model in the main program to make it easy to test with various loss functions
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     
     #model.summary()
     
+     
+    outputs = Conv2D(n_classes, (1, 1), activation='softmax')(c9)
+     
+    model = Model(inputs=[inputs], outputs=[outputs])
     return model
 
 # Image reading and preprocessing
@@ -118,8 +120,8 @@ train_masks_input = np.expand_dims(train_masks_encoded_original_shape, axis=3)
 # Train-test split
 X1, X_test, y1, y_test = train_test_split(train_images, train_masks_input, test_size = 0.20, random_state = 0)
 
-# Use a subset for training
-X_train, X_do_not_use, y_train, y_do_not_use = train_test_split(X1, y1, test_size=0.001)
+# Subset for training (when re-enabled)
+X_train, _, y_train, _ = train_test_split(X1, y1, test_size=0.001)
 
 # Convert to categorical
 n_classes = 5  # Define the number of classes you are working with
@@ -134,13 +136,14 @@ IMG_CHANNELS = X_train.shape[3]
 def get_model():
     return multi_unet_model(n_classes=n_classes, IMG_HEIGHT=IMG_HEIGHT, IMG_WIDTH=IMG_WIDTH, IMG_CHANNELS=IMG_CHANNELS)
 
-model = get_model()
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+# model = get_model()
+# model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# Define a ModelCheckpoint callback
+# # Define a ModelCheckpoint callback
 checkpoint_path = os.environ["SEKO_WEIGHTS_OUT"]
-checkpoint = ModelCheckpoint(checkpoint_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+# checkpoint = ModelCheckpoint(checkpoint_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
+# Keep this commented out until training is necessary
 # history = model.fit(X_train, y_train_cat, 
 #                     batch_size=16, 
 #                     verbose=1, 
@@ -149,41 +152,40 @@ checkpoint = ModelCheckpoint(checkpoint_path, monitor='val_loss', verbose=1, sav
 #                     shuffle=False, 
 #                     callbacks=[checkpoint])
 
-# Evaluate the best model saved
+# Evaluate saved model
 best_model = keras.models.load_model(checkpoint_path)
-# model.load_model(checkpoint_path)
 _, acc = best_model.evaluate(X_test, y_test_cat)
 print("Accuracy of the best model is = ", (acc * 100.0), "%")
 
-# Plot training and validation loss
+# Plot training and validation loss when training is necessary
 # loss = history.history['loss']
 # val_loss = history.history['val_loss']
-epochs = range(1, 200 + 1)
+# epochs = range(1, 200 + 1)
 # plt.plot(epochs, loss, 'y', label='Training loss')
 # plt.plot(epochs, val_loss, 'r', label='Validation loss')
-plt.title('Training and validation loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.legend()
-plt.show()
 
-# Predict on a few images
-import random
-test_img_number = random.randint(0, len(X_test))
-test_img = X_test[test_img_number]
-ground_truth=y_test[test_img_number]
-test_img_input=np.expand_dims(test_img, 0)
-prediction = (best_model.predict(test_img_input))
-predicted_img=np.argmax(prediction, axis=3)[0,:,:]
+# plt.title('Training and validation loss')
+# plt.xlabel('Epochs')
+# plt.ylabel('Loss')
+# plt.legend()
+# plt.show()
 
-plt.figure(figsize=(12, 8))
-plt.subplot(231)
-plt.title('Testing Image')
-plt.imshow(test_img)
-plt.subplot(232)
-plt.title('Testing Label')
-plt.imshow(ground_truth[:,:,0], cmap='jet')
-plt.subplot(233)
-plt.title('Prediction on test image')
-plt.imshow(predicted_img, cmap='jet')
-plt.show()
+# # Sample prediction to evaluate the model
+# test_img_number = random.randrange(len(X_test))
+# test_img = X_test[test_img_number]
+# ground_truth = y_test[test_img_number]
+# test_img_input = np.expand_dims(test_img, 0)
+# prediction = best_model.predict(test_img_input)
+# predicted_img = np.argmax(prediction, axis=3)[0, :, :]
+
+# plt.figure(figsize=(12, 8))
+# plt.subplot(231)
+# plt.title('Testing Image')
+# plt.imshow(test_img)
+# plt.subplot(232)
+# plt.title('Testing Label')
+# plt.imshow(ground_truth[:,:,0], cmap='jet')
+# plt.subplot(233)
+# plt.title('Prediction on test image')
+# plt.imshow(predicted_img, cmap='jet')
+# plt.show()
