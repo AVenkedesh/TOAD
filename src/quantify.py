@@ -13,8 +13,8 @@ import csv
 import pandas as pd
 
 
-folder_path = None # Replace with the path to your folder with images for quantification -- this should be the "Original Predictions folder"
-output_csv_path = None # Replace with the path for the name of the CSV file -- Make sure to include a filepath
+folder_path = "outputs/Original_Predictions"# Replace with the path to your folder with images for quantification -- this should be the "Original Predictions folder"
+output_csv_path = "outputs/quantify_results.csv" # Replace with the path for the name of the CSV file -- Make sure to include a filepath
 
 # Define target values for all categories
 TARGET_VALUES = {
