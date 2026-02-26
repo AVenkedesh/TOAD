@@ -14,9 +14,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Define the path to your masks
-mask_folder_path = None
+mask_folder_path = "BME6938_Project_Dataset/temp_test/masks"
 # Define path to original predictions, NOT visualized predictions
-predictions_folder_path = None
+predictions_folder_path = "outputs/Original_Predictions"
 # Initialize empty lists to store the masks and predictions
 masks = []
 predictions = []
