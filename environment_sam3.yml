@@ -1,0 +1,47 @@
+name: seko-sam3
+
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - scikit-image
+  - scipy
+  - pillow
+  - jupyter
+  - tqdm
+  - pyyaml
+  - pip
+  - pip:
+      # ── Deep learning core ──────────────────────────────────────────
+      - torch==2.10.0
+      - torchvision==0.25.0
+      - torchaudio==2.10.0
+      - torchmetrics==1.9.0
+      # ── SAM 3 dependencies ──────────────────────────────────────────
+      - timm==1.0.25          # ViT backbones
+      - einops==0.8.2         # tensor rearrangement
+      - iopath==0.1.10        # Meta file I/O (used by SAM 3 checkpoint loader)
+      - hydra-core==1.3.2     # config management
+      - omegaconf==2.3.0      # hydra config backend
+      - ftfy==6.1.1           # text normalization (SAM 3 text encoder)
+      - regex==2026.2.28      # used by SAM 3 tokenizer
+      # ── Vision / data ───────────────────────────────────────────────
+      - opencv-python
+      - huggingface_hub==1.6.0
+      - supervision==0.27.0.post1
+      # ── Notebook ────────────────────────────────────────────────────
+      - jupyter-bbox-widget
+      # ── SEKO (Keras/TF) — kept for predict.py --backbone seko ───────
+      - tensorflow==2.20.0
+      # NOTE: sam3 itself must be installed separately as a custom
+      # patched package — it is not available on PyPI.
+      # Install from the local clone:
+      #   pip install -e /path/to/sam3

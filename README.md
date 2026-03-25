@@ -30,3 +30,19 @@ python src/forward_pass.py \
   --model "/path/to/model.keras" \
   --image "/path/to/input_image.tif" \
   --output "/path/to/output_mask.png"
+```
+
+## SAM 3 Environment (seko-sam3)
+
+For SAM 3 integration, use the separate environment:
+
+    conda env create -f environment_sam3.yml
+    conda activate seko-sam3
+
+**Prerequisites:**
+1. Request HuggingFace access at huggingface.co/facebook/sam3
+2. Run `huggingface-cli login` and paste your token
+3. Weights download automatically on first use
+
+Use `seko` env for SEKO/U-Net training and inference.
+Use `seko-sam3` env for SAM 3 inference and fine-tuning.

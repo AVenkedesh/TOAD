@@ -8,25 +8,27 @@ Yo! This script contains helper functions to visualize segmentation masks:
 import numpy as np
 import cv2
 
+# Explicit per-tissue RGB colors — defined as constants so SEKO and SAM 3
+# outputs are always rendered with identical colors regardless of pipeline.
+TISSUE_COLORS = {
+    0: (0,   0,   0),    # background
+    1: (255, 0,   0),    # bone
+    2: (0,   255, 0),    # cartilage
+    3: (0,   0,   255),  # gp (growth plate)
+    4: (255, 255, 0),    # marrow
+    5: (255, 0,   255),  # osteophyte
+}
+
 
 def build_palette(n_classes: int) -> np.ndarray:
-    base = np.array([
-        [0, 0, 0],        # 0 background
-        [255, 0, 0],      # 1
-        [0, 255, 0],      # 2
-        [0, 0, 255],      # 3
-        [255, 255, 0],    # 4
-        [255, 0, 255],    # 5
-        [0, 255, 255],    # 6
-    ], dtype=np.uint8)
-
-    if n_classes <= len(base):
-        return base[:n_classes]
-
     palette = np.zeros((n_classes, 3), dtype=np.uint8)
-    palette[:len(base)] = base
 
-    for i in range(len(base), n_classes):
+    for label_id, rgb in TISSUE_COLORS.items():
+        if label_id < n_classes:
+            palette[label_id] = rgb
+
+    # Extend with pseudo-random colors for any labels beyond the defined set.
+    for i in range(len(TISSUE_COLORS), n_classes):
         palette[i] = [(37*i) % 256, (91*i) % 256, (53*i) % 256]
 
     return palette
