@@ -4,6 +4,9 @@ Default: resize only (no color edits); save as ``{stem}_processed.png``; write
 ``rename_mapping.csv`` mapping output names to source paths unless disabled.
 
 Default paths: ``human_data/original_data`` -> ``human_data/processed_data`` (under repo root).
+Original images must be in the original_data folder.
+Processed images will be saved in the processed_data folder.
+
 Default size: 256 x 192. Run ``python src/preprocess_human_data.py -h`` for argparse help.
 
 CLI (one line each):
