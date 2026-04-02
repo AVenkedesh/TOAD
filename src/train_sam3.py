@@ -24,6 +24,7 @@ Usage
 """
 
 import argparse
+import contextlib
 import os
 import time
 
@@ -286,6 +287,12 @@ def compute_loss(out: dict, boxes_cxcywh: torch.Tensor, binary_masks: torch.Tens
 def run_epoch(model, loader, optimizer, device, train: bool) -> float:
     model.train(train)
     context = torch.enable_grad if train else torch.no_grad()
+    # SAM3 is designed to run under bfloat16 autocast on CUDA
+    autocast_ctx = (
+        torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        if device.type == "cuda"
+        else contextlib.nullcontext()
+    )
     total_loss, n = 0.0, 0
 
     with context():
@@ -294,24 +301,25 @@ def run_epoch(model, loader, optimizer, device, train: bool) -> float:
             boxes_cxcywh  = batch["boxes_cxcywh"].squeeze(0)             # (N, 4)
             binary_masks  = batch["binary_masks"].squeeze(0)             # (N, H, W)
 
-            # ── Backbone forward (frozen — no grad) ─────────────────────
-            with torch.no_grad():
-                backbone_out = model.backbone.forward_image(image_tensor)
-                text_out     = model.backbone.forward_text(["visual"], device=device)
-                backbone_out.update(text_out)
+            with autocast_ctx:
+                # ── Backbone forward (frozen — no grad) ──────────────────
+                with torch.no_grad():
+                    backbone_out = model.backbone.forward_image(image_tensor)
+                    text_out     = model.backbone.forward_text(["visual"], device=device)
+                    backbone_out.update(text_out)
 
-            # ── Build prompts + target ───────────────────────────────────
-            prompt     = build_prompt(boxes_cxcywh, device)
-            find_input = build_find_input(device)
-            find_target = build_find_target(boxes_cxcywh, binary_masks, device)
+                # ── Build prompts + target ───────────────────────────────
+                prompt      = build_prompt(boxes_cxcywh, device)
+                find_input  = build_find_input(device)
+                find_target = build_find_target(boxes_cxcywh, binary_masks, device)
 
-            # ── Forward through trainable components ─────────────────────
-            out = model.forward_grounding(
-                backbone_out=backbone_out,
-                find_input=find_input,
-                find_target=find_target,
-                geometric_prompt=prompt,
-            )
+                # ── Forward through trainable components ─────────────────
+                out = model.forward_grounding(
+                    backbone_out=backbone_out,
+                    find_input=find_input,
+                    find_target=find_target,
+                    geometric_prompt=prompt,
+                )
 
             loss = compute_loss(out, boxes_cxcywh, binary_masks, device)
 
