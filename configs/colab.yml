@@ -1,0 +1,15 @@
+paths:
+  train_csv: "/content/drive/MyDrive/seko_storage/data/rat_original/train.csv"
+  weights_in: "/content/drive/MyDrive/seko_storage/models/V2_best_model.keras"
+  output_dir: "/content/drive/MyDrive/seko_storage/outputs"
+
+data:
+  img_height: 192
+  img_width: 256
+
+inference:
+  input_dir: "/content/drive/MyDrive/seko_storage/data/rat_original/Testing_images/Inputs"
+
+sam3:
+  ckpt_path: "/content/checkpoints/sam3.pt"
+  device: "cuda"

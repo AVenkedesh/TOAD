@@ -12,6 +12,8 @@ predictions/
 
 # model weights
 *.keras
+*.pt
+checkpoints/
 
 # OS / editor
 .DS_Store

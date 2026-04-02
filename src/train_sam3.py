@@ -48,6 +48,12 @@ from sam3.train.loss.loss_fns import dice_loss
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "configs", "baseline.yml")
 
 # ── Constants ──────────────────────────────────────────────────────────────
+"""
+Need to play around with some of these numbers.
+MIN_MASK_AREA_PX is a heuristic to filter out tiny tissue classes that are likely noise.
+The tradeoff -> some classes (like ostephytes) may be small but clinically important, so we don't want to set this too high.
+Need to figure out the proper values.
+"""
 SAM3_RESOLUTION  = 1008      # ViT input size
 SAM3_IMAGE_MEAN  = [0.5, 0.5, 0.5]
 SAM3_IMAGE_STD   = [0.5, 0.5, 0.5]
@@ -69,7 +75,6 @@ def preprocess_image(image_rgb: np.ndarray) -> torch.Tensor:
     """(H, W, 3) uint8 → (1, 3, 1008, 1008) float32 in [-1, 1]."""
     t = torch.from_numpy(image_rgb).permute(2, 0, 1)  # (3, H, W)
     return _transform(t).unsqueeze(0)                  # (1, 3, 1008, 1008)
-
 
 # ── Dataset ────────────────────────────────────────────────────────────────
 

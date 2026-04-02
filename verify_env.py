@@ -56,7 +56,7 @@ except ImportError:
     )
     sys.exit(1)
 
-CKPT = os.path.join(os.path.dirname(__file__), "checkpoints", "sam3_s.pt")
+CKPT = os.path.join(os.path.dirname(__file__), "checkpoints", "sam3.pt")
 CFG  = "configs/sam3/sam3_s.yaml"
 
 if not os.path.exists(CKPT):
@@ -65,15 +65,14 @@ if not os.path.exists(CKPT):
         "     Download it with:\n\n"
         "       python -c \"\n"
         "       from huggingface_hub import hf_hub_download\n"
-        "       hf_hub_download(repo_id='facebook/sam3', filename='sam3_s.pt',\n"
+        "       hf_hub_download(repo_id='facebook/sam3', filename='sam3.pt',\n"
         "                       local_dir='./checkpoints')\n"
-        "       \"\n\n"
-        "     (Run `huggingface-cli login` first if you haven't already.)"
+        "       \"\n"
     )
     sys.exit(1)
 
 predictor = build_sam3_image_predictor(model_cfg=CFG, ckpt_path=CKPT)
-print(f"✓  loaded sam3_s.pt  (device: {device})")
+print(f"✓  loaded sam3.pt  (device: {device})")
 
 # ── Summary ──────────────────────────────────────────────────
 print("\n" + "=" * 55)
