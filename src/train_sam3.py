@@ -300,7 +300,7 @@ def compute_loss_and_dice(
 def run_epoch(model, loader, optimizer, device, train: bool) -> dict:
     """Returns {"loss": float, "dice": float}."""
     model.train(train)
-    context = torch.enable_grad if train else torch.no_grad()
+    context = torch.enable_grad if train else torch.no_grad
     # SAM3 is designed to run under bfloat16 autocast on CUDA
     autocast_ctx = (
         torch.autocast(device_type="cuda", dtype=torch.bfloat16)
