@@ -25,6 +25,7 @@ Usage
 
 import argparse
 import contextlib
+import json
 import os
 import time
 
@@ -227,9 +228,13 @@ def build_find_target(
 
 # ── Loss ───────────────────────────────────────────────────────────────────
 
-def compute_loss(out: dict, boxes_cxcywh: torch.Tensor, binary_masks: torch.Tensor, device) -> torch.Tensor:
+def compute_loss_and_dice(
+    out: dict, boxes_cxcywh: torch.Tensor, binary_masks: torch.Tensor, device
+) -> tuple[torch.Tensor, float]:
     """
-    Compute Dice + BCE loss on Hungarian-matched (pred, GT) pairs.
+    Compute Dice + BCE loss and DICE metric on Hungarian-matched (pred, GT) pairs.
+
+    Returns (loss, dice_metric) where dice_metric is a plain float [0, 1].
 
     out["pred_masks"] : (B, Q, H_pred, W_pred) — raw logits from model
     out["pred_boxes"] : (B, Q, 4) — predicted boxes in cxcywh normalized
@@ -239,7 +244,7 @@ def compute_loss(out: dict, boxes_cxcywh: torch.Tensor, binary_masks: torch.Tens
     pred_masks = out.get("pred_masks")   # (1, Q, H, W)
     pred_boxes = out.get("pred_boxes")   # (1, Q, 4)
     if pred_masks is None or pred_boxes is None:
-        return torch.tensor(0.0, device=device, requires_grad=True)
+        return torch.tensor(0.0, device=device, requires_grad=True), 0.0
 
     N = boxes_cxcywh.shape[0]
     gt_boxes = boxes_cxcywh.to(device)       # (N, 4)
@@ -252,7 +257,7 @@ def compute_loss(out: dict, boxes_cxcywh: torch.Tensor, binary_masks: torch.Tens
     gt_idx, pred_idx = linear_sum_assignment(cost)   # both shape (N,)
 
     if len(pred_idx) == 0:
-        return torch.tensor(0.0, device=device, requires_grad=True)
+        return torch.tensor(0.0, device=device, requires_grad=True), 0.0
 
     matched_preds = pred_masks[0, pred_idx]                       # (M, H_pred, W_pred)
     matched_gt    = binary_masks[gt_idx].to(device).float()       # (M, H_orig, W_orig)
@@ -279,12 +284,21 @@ def compute_loss(out: dict, boxes_cxcywh: torch.Tensor, binary_masks: torch.Tens
         num_boxes=torch.tensor(M, device=device, dtype=torch.float32),
     )
 
-    return loss_bce + loss_dice
+    # DICE metric: threshold predictions at 0.5, no gradient needed
+    with torch.no_grad():
+        pred_bin  = (matched_preds.sigmoid() > 0.5).float()
+        inter     = (pred_bin * matched_gt).sum(dim=(-2, -1))
+        union     = pred_bin.sum(dim=(-2, -1)) + matched_gt.sum(dim=(-2, -1))
+        dice_vals = (2.0 * inter + 1e-6) / (union + 1e-6)
+        dice_metric = dice_vals.mean().item()
+
+    return loss_bce + loss_dice, dice_metric
 
 
 # ── Training / validation steps ────────────────────────────────────────────
 
-def run_epoch(model, loader, optimizer, device, train: bool) -> float:
+def run_epoch(model, loader, optimizer, device, train: bool) -> dict:
+    """Returns {"loss": float, "dice": float}."""
     model.train(train)
     context = torch.enable_grad if train else torch.no_grad()
     # SAM3 is designed to run under bfloat16 autocast on CUDA
@@ -293,7 +307,7 @@ def run_epoch(model, loader, optimizer, device, train: bool) -> float:
         if device.type == "cuda"
         else contextlib.nullcontext()
     )
-    total_loss, n = 0.0, 0
+    total_loss, total_dice, n = 0.0, 0.0, 0
 
     with context():
         for batch in loader:
@@ -321,7 +335,7 @@ def run_epoch(model, loader, optimizer, device, train: bool) -> float:
                     geometric_prompt=prompt,
                 )
 
-            loss = compute_loss(out, boxes_cxcywh, binary_masks, device)
+            loss, dice = compute_loss_and_dice(out, boxes_cxcywh, binary_masks, device)
 
             if train and loss.requires_grad:
                 optimizer.zero_grad()
@@ -330,9 +344,10 @@ def run_epoch(model, loader, optimizer, device, train: bool) -> float:
                 optimizer.step()
 
             total_loss += loss.item()
+            total_dice += dice
             n += 1
 
-    return total_loss / max(n, 1)
+    return {"loss": total_loss / max(n, 1), "dice": total_dice / max(n, 1)}
 
 
 # ── Freezing ────────────────────────────────────────────────────────────────
@@ -421,41 +436,66 @@ def main():
     os.makedirs(ckpt_dir, exist_ok=True)
 
     best_val_loss = float("inf")
+    best_val_dice = 0.0
     best_ckpt_path = os.path.join(ckpt_dir, "sam3_toad_best.pt")
+
+    metrics_log = {"epoch": [], "train_loss": [], "val_loss": [],
+                   "train_dice": [], "val_dice": []}
+    metrics_path = os.path.join(args.output_dir, "metrics.json")
+
+    print(f"\n{'Epoch':>5}  {'TrainLoss':>9}  {'ValLoss':>8}  "
+          f"{'TrainDICE':>9}  {'ValDICE':>8}  {'LR':>8}  {'Time':>6}")
+    print("-" * 68)
 
     for epoch in range(1, args.epochs + 1):
         t0 = time.time()
 
-        train_loss = run_epoch(model, train_loader, optimizer, device, train=True)
-        val_loss   = run_epoch(model, val_loader,   optimizer, device, train=False)
+        train_stats = run_epoch(model, train_loader, optimizer, device, train=True)
+        val_stats   = run_epoch(model, val_loader,   optimizer, device, train=False)
 
         scheduler.step()
 
         elapsed = time.time() - t0
+        marker = " ★" if val_stats["dice"] > best_val_dice else ""
+
         print(
-            f"Epoch {epoch:3d}/{args.epochs}  "
-            f"train={train_loss:.4f}  val={val_loss:.4f}  "
-            f"lr={scheduler.get_last_lr()[0]:.2e}  "
-            f"time={elapsed:.0f}s"
+            f"{epoch:5d}  "
+            f"{train_stats['loss']:9.4f}  {val_stats['loss']:8.4f}  "
+            f"{train_stats['dice']:9.4f}  {val_stats['dice']:8.4f}  "
+            f"{scheduler.get_last_lr()[0]:.2e}  {elapsed:5.0f}s"
+            f"{marker}",
+            flush=True,
         )
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        # Update metrics log and persist after every epoch
+        metrics_log["epoch"].append(epoch)
+        metrics_log["train_loss"].append(round(train_stats["loss"], 6))
+        metrics_log["val_loss"].append(round(val_stats["loss"], 6))
+        metrics_log["train_dice"].append(round(train_stats["dice"], 6))
+        metrics_log["val_dice"].append(round(val_stats["dice"], 6))
+        with open(metrics_path, "w") as f:
+            json.dump(metrics_log, f, indent=2)
+
+        if val_stats["loss"] < best_val_loss:
+            best_val_loss = val_stats["loss"]
+        if val_stats["dice"] > best_val_dice:
+            best_val_dice = val_stats["dice"]
             torch.save(
                 {"epoch": epoch, "model_state_dict": model.state_dict(),
-                 "val_loss": val_loss},
+                 "val_loss": val_stats["loss"], "val_dice": val_stats["dice"]},
                 best_ckpt_path,
             )
-            print(f"  Saved best checkpoint → {best_ckpt_path}")
 
     # Always save the final epoch too
     final_ckpt = os.path.join(ckpt_dir, f"sam3_toad_epoch{args.epochs}.pt")
     torch.save(
         {"epoch": args.epochs, "model_state_dict": model.state_dict(),
-         "val_loss": val_loss},
+         "val_loss": val_stats["loss"], "val_dice": val_stats["dice"]},
         final_ckpt,
     )
-    print(f"\nDone. Best val loss: {best_val_loss:.4f}  →  {best_ckpt_path}")
+    print(f"\nDone. Best val DICE: {best_val_dice:.4f}  Best val loss: {best_val_loss:.4f}")
+    print(f"Metrics saved → {metrics_path}")
+    print(f"Best checkpoint → {best_ckpt_path}")
 
 
 if __name__ == "__main__":
