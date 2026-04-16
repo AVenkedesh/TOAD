@@ -61,6 +61,7 @@ SAM3_IMAGE_MEAN  = [0.5, 0.5, 0.5]
 SAM3_IMAGE_STD   = [0.5, 0.5, 0.5]
 MIN_MASK_AREA_PX = 50        # ignore tissue classes with < 50 px in mask
 TISSUE_LABELS    = [1, 2, 3, 4, 5]  # bone, cartilage, gp, marrow, osteophyte
+TISSUE_NAMES     = {1: "Bone", 2: "Cartilage", 3: "Growth Plate", 4: "Marrow", 5: "Osteophyte"}
 
 
 # ── Image preprocessing ────────────────────────────────────────────────────
@@ -229,24 +230,27 @@ def build_find_target(
 # ── Loss ───────────────────────────────────────────────────────────────────
 
 def compute_loss_and_dice(
-    out: dict, boxes_cxcywh: torch.Tensor, binary_masks: torch.Tensor, device
-) -> tuple[torch.Tensor, float]:
+    out: dict, boxes_cxcywh: torch.Tensor, binary_masks: torch.Tensor, device,
+    label_ids: list | None = None,
+) -> tuple[torch.Tensor, float, dict]:
     """
-    Compute Dice + BCE loss and DICE metric on Hungarian-matched (pred, GT) pairs.
+    Compute Dice + BCE loss and DICE metrics on Hungarian-matched (pred, GT) pairs.
 
-    Returns (loss, dice_metric) where dice_metric is a plain float [0, 1].
+    Returns (loss, mean_dice, per_class_dice) where:
+      mean_dice       : float — average DICE across matched pairs
+      per_class_dice  : dict {label_id: dice} — only populated when label_ids is given
 
     out["pred_masks"] : (B, Q, H_pred, W_pred) — raw logits from model
     out["pred_boxes"] : (B, Q, 4) — predicted boxes in cxcywh normalized
     boxes_cxcywh      : (N, 4) GT boxes
     binary_masks      : (N, H_orig, W_orig) bool GT masks
+    label_ids         : list of N ints mapping GT index → tissue class
     """
     pred_masks = out.get("pred_masks")   # (1, Q, H, W)
     pred_boxes = out.get("pred_boxes")   # (1, Q, 4)
     if pred_masks is None or pred_boxes is None:
-        return torch.tensor(0.0, device=device, requires_grad=True), 0.0
+        return torch.tensor(0.0, device=device, requires_grad=True), 0.0, {}
 
-    N = boxes_cxcywh.shape[0]
     gt_boxes = boxes_cxcywh.to(device)       # (N, 4)
     pred_b   = pred_boxes[0].detach()         # (Q, 4)
 
@@ -254,10 +258,10 @@ def compute_loss_and_dice(
     cost = torch.cdist(gt_boxes, pred_b, p=1).cpu().numpy()
 
     # Hungarian: assign each GT to the best predicted query
-    gt_idx, pred_idx = linear_sum_assignment(cost)   # both shape (N,)
+    gt_idx, pred_idx = linear_sum_assignment(cost)   # both shape (M,)
 
     if len(pred_idx) == 0:
-        return torch.tensor(0.0, device=device, requires_grad=True), 0.0
+        return torch.tensor(0.0, device=device, requires_grad=True), 0.0, {}
 
     matched_preds = pred_masks[0, pred_idx]                       # (M, H_pred, W_pred)
     matched_gt    = binary_masks[gt_idx].to(device).float()       # (M, H_orig, W_orig)
@@ -290,15 +294,22 @@ def compute_loss_and_dice(
         inter     = (pred_bin * matched_gt).sum(dim=(-2, -1))
         union     = pred_bin.sum(dim=(-2, -1)) + matched_gt.sum(dim=(-2, -1))
         dice_vals = (2.0 * inter + 1e-6) / (union + 1e-6)
-        dice_metric = dice_vals.mean().item()
+        mean_dice = dice_vals.mean().item()
+        per_class = (
+            {label_ids[gt_idx[i]]: dice_vals[i].item() for i in range(len(gt_idx))}
+            if label_ids is not None else {}
+        )
 
-    return loss_bce + loss_dice, dice_metric
+    return loss_bce + loss_dice, mean_dice, per_class
 
 
 # ── Training / validation steps ────────────────────────────────────────────
 
 def run_epoch(model, loader, optimizer, device, train: bool) -> dict:
-    """Returns {"loss": float, "dice": float}."""
+    """
+    Returns {"loss": float, "dice": float, "class_dice": {label_id: float}}.
+    class_dice is accumulated for every step (train and val).
+    """
     model.train(train)
     context = torch.enable_grad if train else torch.no_grad
     # SAM3 is designed to run under bfloat16 autocast on CUDA
@@ -308,12 +319,15 @@ def run_epoch(model, loader, optimizer, device, train: bool) -> dict:
         else contextlib.nullcontext()
     )
     total_loss, total_dice, n = 0.0, 0.0, 0
+    class_sums   = {k: 0.0 for k in TISSUE_LABELS}
+    class_counts = {k: 0   for k in TISSUE_LABELS}
 
     with context():
         for batch in loader:
             image_tensor  = batch["image_tensor"].squeeze(0).to(device)  # (1, 3, H, W)
             boxes_cxcywh  = batch["boxes_cxcywh"].squeeze(0)             # (N, 4)
             binary_masks  = batch["binary_masks"].squeeze(0)             # (N, H, W)
+            label_ids     = batch["label_ids"].squeeze(0).tolist()       # [int, ...]
 
             with autocast_ctx:
                 # ── Backbone forward (frozen — no grad) ──────────────────
@@ -335,7 +349,9 @@ def run_epoch(model, loader, optimizer, device, train: bool) -> dict:
                     geometric_prompt=prompt,
                 )
 
-            loss, dice = compute_loss_and_dice(out, boxes_cxcywh, binary_masks, device)
+            loss, dice, per_class = compute_loss_and_dice(
+                out, boxes_cxcywh, binary_masks, device, label_ids=label_ids
+            )
 
             if train and loss.requires_grad:
                 optimizer.zero_grad()
@@ -345,9 +361,18 @@ def run_epoch(model, loader, optimizer, device, train: bool) -> dict:
 
             total_loss += loss.item()
             total_dice += dice
+            for cls_id, d in per_class.items():
+                if cls_id in class_sums:
+                    class_sums[cls_id]   += d
+                    class_counts[cls_id] += 1
             n += 1
 
-    return {"loss": total_loss / max(n, 1), "dice": total_dice / max(n, 1)}
+    class_dice = {
+        k: class_sums[k] / class_counts[k]
+        for k in TISSUE_LABELS if class_counts[k] > 0
+    }
+    return {"loss": total_loss / max(n, 1), "dice": total_dice / max(n, 1),
+            "class_dice": class_dice}
 
 
 # ── Freezing ────────────────────────────────────────────────────────────────
@@ -440,7 +465,7 @@ def main():
     best_ckpt_path = os.path.join(ckpt_dir, "sam3_toad_best.pt")
 
     metrics_log = {"epoch": [], "train_loss": [], "val_loss": [],
-                   "train_dice": [], "val_dice": []}
+                   "train_dice": [], "val_dice": [], "val_class_dice": []}
     metrics_path = os.path.join(args.output_dir, "metrics.json")
 
     print(f"\n{'Epoch':>5}  {'TrainLoss':>9}  {'ValLoss':>8}  "
@@ -467,12 +492,23 @@ def main():
             flush=True,
         )
 
+        # Per-class val DICE on a second line
+        class_parts = "  ".join(
+            f"{TISSUE_NAMES[k]}:{val_stats['class_dice'][k]:.3f}"
+            for k in TISSUE_LABELS if k in val_stats["class_dice"]
+        )
+        if class_parts:
+            print(f"       val/class — {class_parts}", flush=True)
+
         # Update metrics log and persist after every epoch
         metrics_log["epoch"].append(epoch)
         metrics_log["train_loss"].append(round(train_stats["loss"], 6))
         metrics_log["val_loss"].append(round(val_stats["loss"], 6))
         metrics_log["train_dice"].append(round(train_stats["dice"], 6))
         metrics_log["val_dice"].append(round(val_stats["dice"], 6))
+        metrics_log["val_class_dice"].append(
+            {str(k): round(v, 6) for k, v in val_stats["class_dice"].items()}
+        )
         with open(metrics_path, "w") as f:
             json.dump(metrics_log, f, indent=2)
 
