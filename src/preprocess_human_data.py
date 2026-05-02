@@ -3,9 +3,9 @@ Resize human histology images (.jpg/.jpeg/.tif/.tiff).
 
 Default input: ``Allen_Lab_SafO-FastGreen_images/TIFF_second_batch`` — collects images
 from that folder and from each immediate subfolder (e.g. ``*_bone_TIFF/*.tif``),
-excluding ``processed_images``.
+excluding ``Processed_Images``.
 
-Default output: ``.../TIFF_second_batch/processed_images`` (created if missing).
+Default output: ``TOAD/outputs/Processed_Images`` (created if missing).
 
 Also supports (from human_preprocess_colab workflow):
   - normalize_to_uint8: 16-bit / grayscale / RGBA -> uint8 BGR
@@ -44,7 +44,7 @@ DEFAULT_REINHARD_REF_MEANS = (155.6966, 144.2858, 102.3828)  # L, A, B
 DEFAULT_REINHARD_REF_STDS = (40.1614, 25.1199, 25.5855)
 
 # Subfolder under TIFF_second_batch where outputs go; excluded from input discovery
-PROCESSED_SUBDIR_NAME = "processed_images"
+PROCESSED_SUBDIR_NAME = "Processed_Images"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".tif", ".tiff"}
 
 
@@ -206,7 +206,7 @@ def resize_image(img_bgr: np.ndarray, width: int, height: int) -> np.ndarray:
 def iter_image_paths(input_dir: Path) -> list[Path]:
     """
     Collect images directly under ``input_dir`` and under each immediate subdirectory,
-    except ``processed_images`` (so outputs are never treated as inputs).
+    except ``Processed_Images`` (so outputs are never treated as inputs).
     """
     found: set[Path] = set()
     if not input_dir.is_dir():
@@ -402,7 +402,7 @@ def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
     default_batch_root = repo_root / "Allen_Lab_SafO-FastGreen_images" / "TIFF_second_batch"
     default_input = default_batch_root
-    default_output = default_batch_root / PROCESSED_SUBDIR_NAME
+    default_output = repo_root / "outputs" / PROCESSED_SUBDIR_NAME
 
     parser = argparse.ArgumentParser(
         description="Preprocess human images: uint8 load, Reinhard (default), tile export (default) or whole-image resize."
