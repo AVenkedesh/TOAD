@@ -64,20 +64,22 @@ TISSUE_LABELS    = [1, 2, 3, 4, 5]  # bone, cartilage, gp, marrow, osteophyte
 TISSUE_NAMES     = {1: "Bone", 2: "Cartilage", 3: "Growth Plate", 4: "Marrow", 5: "Osteophyte"}
 
 
-# ── Image preprocessing ────────────────────────────────────────────────────
-
-_transform = v2.Compose([
+# ── Data augmentation ────────────────────────────────────────────────────
+_augmentation_transform = v2.Compose([
+    v2.RandomHorizontalFlip(p=0.5),
+    v2.RandomVerticalFlip(p=0.5),
+    v2.RandomRotation(degrees=20),
+    v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
     v2.ToDtype(torch.uint8, scale=True),
     v2.Resize((SAM3_RESOLUTION, SAM3_RESOLUTION)),
     v2.ToDtype(torch.float32, scale=True),
     v2.Normalize(mean=SAM3_IMAGE_MEAN, std=SAM3_IMAGE_STD),
 ])
 
-
-def preprocess_image(image_rgb: np.ndarray) -> torch.Tensor:
-    """(H, W, 3) uint8 → (1, 3, 1008, 1008) float32 in [-1, 1]."""
+def preprocess_image_with_augmentation(image_rgb: np.ndarray) -> torch.Tensor:
+    """Apply augmentation and preprocessing: (H, W, 3) uint8 → (1, 3, 1008, 1008) float32."""
     t = torch.from_numpy(image_rgb).permute(2, 0, 1)  # (3, H, W)
-    return _transform(t).unsqueeze(0)                  # (1, 3, 1008, 1008)
+    return _augmentation_transform(t).unsqueeze(0)
 
 # ── Dataset ────────────────────────────────────────────────────────────────
 
